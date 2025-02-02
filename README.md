@@ -5,8 +5,7 @@
 [![在线试用](https://img.shields.io/badge/在线试用-点击体验-blue)](https://aiyangtongxue.github.io/Bookmark-Validator) 
 [![开源协议](https://img.shields.io/github/license/aiyangtongxue/Bookmark-Validator)](LICENSE)
 
-![界面截图]([https://via.placeholder.com/800x500.png/FFFAF0/37474F?text=书签检测工具界面预览](https://raw.githubusercontent.com/aiyangtongxue/Bookmark-Validator/refs/heads/main/%E7%AC%AC%E4%B8%80%E4%B8%AA%E7%89%88%E6%9C%AC%E5%9B%BE%E7%89%87.png))
-
+![界面截图](第一个版本图片.png)
 ---
 
 ## ✨ 核心功能
