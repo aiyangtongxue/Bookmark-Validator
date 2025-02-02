@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>书签可用性检测工具</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .upload-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        #results {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .status-item {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+
+        .status-item.available {
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .status-item.unavailable {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+        }
+
+        .url {
+            color: #666;
+            font-size: 0.9em;
+            margin-left: 15px;
+        }
+
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #1976D2;
+        }
+
+        .loading {
+            display: none;
+            margin: 20px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="upload-section">
+        <h2>书签可用性检测工具</h2>
+        <input type="file" id="bookmarkFile" accept=".html">
+        <button onclick="startCheck()">开始检测</button>
+        <div class="loading" id="loading">检测中... 已完成 <span id="progress">0</span>%</div>
+    </div>
+    <div id="results"></div>
+
+    <script>
+        function parseBookmarks(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(e.target.result, "text/html");
+                    const links = doc.querySelectorAll('a');
+                    const bookmarks = Array.from(links).map(link => ({
+                        title: link.textContent.trim(),
+                        url: link.href
+                    }));
+                    resolve(bookmarks);
+                };
+                reader.readAsText(file);
+            });
+        }
+
+        async function checkAvailability(url) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch(url, {
+                    method: 'HEAD',
+                    mode: 'no-cors',
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function startCheck() {
+            const fileInput = document.getElementById('bookmarkFile');
+            if (!fileInput.files.length) return alert('请先选择书签文件');
+
+            const resultsDiv = document.getElementById('results');
+            const loading = document.getElementById('loading');
+            resultsDiv.innerHTML = '';
+            loading.style.display = 'block';
+
+            try {
+                const bookmarks = await parseBookmarks(fileInput.files[0]);
+                let completed = 0;
+
+                for (const [index, bookmark] of bookmarks.entries()) {
+                    const status = await checkAvailability(bookmark.url);
+                    const item = document.createElement('div');
+                    item.className = `status-item ${status ? 'available' : 'unavailable'}`;
+                    item.innerHTML = `
+                        ${status ? '✅' : '❌'} 
+                        ${bookmark.title}
+                        <div class="url">${bookmark.url}</div>
+                    `;
+                    resultsDiv.appendChild(item);
+
+                    completed++;
+                    document.getElementById('progress').textContent = 
+                        Math.round((completed / bookmarks.length) * 100);
+                }
+            } catch (error) {
+                alert('解析书签文件失败: ' + error.message);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

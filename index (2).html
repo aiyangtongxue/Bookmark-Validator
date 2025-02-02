@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>智能书签清理工具</title>
+    <style>
+        :root {
+            --primary: #2196F3;
+            --danger: #f44336;
+            --success: #4CAF50;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button.primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        button.danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        button.success {
+            background: var(--success);
+            color: white;
+        }
+
+        button:hover {
+            filter: brightness(0.9);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #results {
+            margin-top: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .status-item {
+            padding: 1rem;
+            margin: 5px 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .status-item:hover {
+            transform: translateX(5px);
+        }
+
+        .status-item.available {
+            background: #e8f5e9;
+            border-left: 4px solid var(--success);
+        }
+
+        .status-item.unavailable {
+            background: #ffebee;
+            border-left: 4px solid var(--danger);
+        }
+
+        .url {
+            color: #666;
+            font-size: 0.85em;
+            margin-left: 15px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .loading {
+            display: none;
+            margin: 20px 0;
+            text-align: center;
+            color: #666;
+        }
+
+        .stats {
+            margin: 15px 0;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        input[type="file"] {
+            margin: 15px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>📚 智能书签清理工具</h2>
+        <input type="file" id="bookmarkFile" accept=".html">
+        <div class="button-group">
+            <button class="primary" onclick="startCheck()">开始检测</button>
+            <button class="danger" id="removeBtn" onclick="removeUnavailable()" disabled>删除不可用</button>
+            <button class="success" id="exportBtn" onclick="exportBookmarks()" disabled>导出书签</button>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="loading" id="loading">
+            <div>检测中... 已完成 <span id="progress">0</span>%</div>
+            <div class="progress-bar">
+                <div id="progressBar" style="width:0%; height:4px; background:var(--primary); transition:width 0.3s"></div>
+            </div>
+        </div>
+    </div>
+    <div id="results"></div>
+
+    <script>
+        let originalBookmarks = [];
+        let filteredBookmarks = [];
+        let availabilityStatus = [];
+
+        function updateStats() {
+            const total = filteredBookmarks.length;
+            const available = availabilityStatus.filter(s => s).length;
+            document.getElementById('stats').innerHTML = `
+                共 ${total} 个书签 | 可用：${available} | 不可用：${total - available}
+            `;
+        }
+
+        async function parseBookmarks(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(e.target.result, "text/html");
+                    const links = doc.querySelectorAll('a');
+                    originalBookmarks = Array.from(links).map(link => ({
+                        title: link.textContent.trim(),
+                        url: link.href
+                    }));
+                    resolve(originalBookmarks);
+                };
+                reader.readAsText(file);
+            });
+        }
+
+        async function checkAvailability(url) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch(url, {
+                    method: 'HEAD',
+                    mode: 'no-cors',
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function startCheck() {
+            const fileInput = document.getElementById('bookmarkFile');
+            if (!fileInput.files.length) return alert('请选择书签文件');
+
+            const resultsDiv = document.getElementById('results');
+            const loading = document.getElementById('loading');
+            resultsDiv.innerHTML = '';
+            loading.style.display = 'block';
+            availabilityStatus = [];
+
+            try {
+                originalBookmarks = await parseBookmarks(fileInput.files[0]);
+                filteredBookmarks = [...originalBookmarks];
+                
+                let completed = 0;
+                for (const [index, bookmark] of originalBookmarks.entries()) {
+                    const status = await checkAvailability(bookmark.url);
+                    availabilityStatus.push(status);
+                    
+                    const item = document.createElement('div');
+                    item.className = `status-item ${status ? 'available' : 'unavailable'}`;
+                    item.innerHTML = `
+                        ${status ? '✅' : '❌'} 
+                        ${bookmark.title}
+                        <div class="url">${bookmark.url}</div>
+                    `;
+                    resultsDiv.appendChild(item);
+
+                    completed++;
+                    const progress = (completed / originalBookmarks.length) * 100;
+                    document.getElementById('progress').textContent = Math.round(progress);
+                    document.getElementById('progressBar').style.width = `${progress}%`;
+                }
+
+                document.getElementById('removeBtn').disabled = false;
+                document.getElementById('exportBtn').disabled = false;
+                updateStats();
+            } catch (error) {
+                alert('处理失败: ' + error.message);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function removeUnavailable() {
+            if (!confirm('确定要删除所有不可用书签吗？')) return;
+            
+            filteredBookmarks = originalBookmarks.filter((_, index) => availabilityStatus[index]);
+            availabilityStatus = availabilityStatus.filter(s => s);
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            filteredBookmarks.forEach(bookmark => {
+                const item = document.createElement('div');
+                item.className = 'status-item available';
+                item.innerHTML = `
+                    ✅ ${bookmark.title}
+                    <div class="url">${bookmark.url}</div>
+                `;
+                resultsDiv.appendChild(item);
+            });
+
+            updateStats();
+            alert(`已删除 ${originalBookmarks.length - filteredBookmarks.length} 个不可用书签`);
+        }
+
+        function exportBookmarks() {
+            if (!filteredBookmarks.length) return alert('没有可导出的书签');
+            
+            const htmlContent = `
+<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>
+${filteredBookmarks.map(b => `
+    <DT><A HREF="${b.url}">${b.title}</A>
+`).join('')}
+</DL></p>
+            `;
+
+            const blob = new Blob([htmlContent], {type: 'text/html'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'cleaned_bookmarks.html';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            alert('导出成功！请使用浏览器书签导入功能导入此文件');
+        }
+    </script>
+</body>
+</html>
