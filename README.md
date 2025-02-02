@@ -6,7 +6,8 @@
 [![开源协议](https://img.shields.io/github/license/aiyangtongxue/Bookmark-Validator)](LICENSE)
 
 ![界面截图](第一个版本图片.png)
----
+![界面截图](第二个版本图片.png)
+-
 
 ## ✨ 核心功能
 
